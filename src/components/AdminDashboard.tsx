@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useHims } from '../context/HimsContext';
+import { HIMS_SUPABASE_SQL_SCHEMA } from '../lib/supabase';
 import {
   Users,
   Calendar,
@@ -16,7 +17,10 @@ import {
   Lock,
   Phone,
   Mail,
-  UserCheck
+  UserCheck,
+  Database,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
@@ -30,10 +34,13 @@ export const AdminDashboard: React.FC = () => {
     getDrugStatus,
     addUser,
     backupDatabase,
-    restoreDatabase
+    restoreDatabase,
+    isCloudConnected,
+    syncStatus
   } = useHims();
 
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'users' | 'backup'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'users' | 'backup' | 'supabase'>('overview');
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Add User Form State
   const [newName, setNewName] = useState('');
@@ -72,7 +79,6 @@ export const AdminDashboard: React.FC = () => {
     const json = backupDatabase();
     setBackupJson(json);
 
-    // Also trigger direct browser file download
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -87,13 +93,19 @@ export const AdminDashboard: React.FC = () => {
     restoreDatabase(restoreInput);
   };
 
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(HIMS_SUPABASE_SQL_SCHEMA.trim());
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3000);
+  };
+
   return (
     <div className="space-y-6">
       {/* Subnav */}
-      <div className="flex space-x-2 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+      <div className="flex flex-wrap gap-2 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
         <button
           onClick={() => setActiveSubTab('overview')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
             activeSubTab === 'overview'
               ? 'bg-purple-600 text-white shadow-md shadow-purple-950/40'
               : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -104,7 +116,7 @@ export const AdminDashboard: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('users')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
             activeSubTab === 'users'
               ? 'bg-purple-600 text-white shadow-md shadow-purple-950/40'
               : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -115,7 +127,7 @@ export const AdminDashboard: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('backup')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
             activeSubTab === 'backup'
               ? 'bg-purple-600 text-white shadow-md shadow-purple-950/40'
               : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -123,6 +135,17 @@ export const AdminDashboard: React.FC = () => {
         >
           <Download className="w-3.5 h-3.5" />
           <span>Database Backup & Restore</span>
+        </button>
+        <button
+          onClick={() => setActiveSubTab('supabase')}
+          className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+            activeSubTab === 'supabase'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Database className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Supabase SQL Schema</span>
         </button>
       </div>
 
@@ -406,6 +429,49 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Tab: Supabase SQL Schema */}
+      {activeSubTab === 'supabase' && (
+        <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Database className="w-4 h-4 text-emerald-400" /> Supabase Database Schema & Cloud Setup
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Current Status:{' '}
+                <strong className={isCloudConnected ? 'text-emerald-400' : 'text-amber-400'}>
+                  {isCloudConnected ? 'Supabase Cloud Connected' : 'Local Storage Cache Active (Ready for Supabase Keys)'}
+                </strong>
+              </p>
+            </div>
+
+            <button
+              onClick={handleCopySql}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto shadow-sm"
+            >
+              {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedSql ? 'Copied to Clipboard!' : 'Copy Supabase SQL Schema'}</span>
+            </button>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-2">
+            <p className="font-semibold text-white">To link your own Supabase Cloud project:</p>
+            <ol className="list-decimal list-inside space-y-1 text-slate-400">
+              <li>Create a new project at <code className="text-emerald-400">supabase.com</code>.</li>
+              <li>Go to <strong>SQL Editor</strong> in Supabase, paste the SQL schema below, and click <strong>RUN</strong>.</li>
+              <li>Set <code className="text-emerald-400 font-mono">VITE_SUPABASE_URL</code> and <code className="text-emerald-400 font-mono">VITE_SUPABASE_ANON_KEY</code> in your environment.</li>
+            </ol>
+          </div>
+
+          <textarea
+            readOnly
+            rows={14}
+            value={HIMS_SUPABASE_SQL_SCHEMA.trim()}
+            className="w-full p-4 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-emerald-300/90 leading-relaxed focus:outline-none select-all"
+          />
         </div>
       )}
     </div>

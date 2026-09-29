@@ -22,11 +22,14 @@ import {
   initialInventoryTransactions,
   initialActivities
 } from '../data/initialData';
+import { supabaseService } from '../services/supabaseService';
 
 interface HimsContextType {
   currentUser: User | null;
   currentRole: UserRole | null;
   activePatient: Patient | null;
+  isCloudConnected: boolean;
+  syncStatus: 'connected' | 'offline_demo' | 'syncing';
   login: (username: string, role: UserRole) => boolean;
   patientLogin: (patientIdOrPhone: string) => boolean;
   logout: () => void;
@@ -77,6 +80,11 @@ interface HimsContextType {
 const HimsContext = createContext<HimsContextType | undefined>(undefined);
 
 export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const isCloudConnected = supabaseService.isConfigured();
+  const [syncStatus, setSyncStatus] = useState<'connected' | 'offline_demo' | 'syncing'>(
+    isCloudConnected ? 'syncing' : 'offline_demo'
+  );
+
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('hims_current_user');
     return saved ? JSON.parse(saved) : initialUsers[2]; // Default to Dr. John Udo (Doctor)
@@ -134,7 +142,59 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Sync to localStorage
+  // Load from Supabase if configured
+  useEffect(() => {
+    if (!isCloudConnected) {
+      setSyncStatus('offline_demo');
+      return;
+    }
+
+    const loadCloudData = async () => {
+      try {
+        setSyncStatus('syncing');
+        const [
+          remoteUsers,
+          remotePatients,
+          remoteDoctors,
+          remoteAppointments,
+          remoteRecords,
+          remotePrescriptions,
+          remoteDrugs,
+          remoteTransactions,
+          remoteActivities
+        ] = await Promise.all([
+          supabaseService.fetchUsers(),
+          supabaseService.fetchPatients(),
+          supabaseService.fetchDoctors(),
+          supabaseService.fetchAppointments(),
+          supabaseService.fetchMedicalRecords(),
+          supabaseService.fetchPrescriptions(),
+          supabaseService.fetchDrugs(),
+          supabaseService.fetchInventoryTransactions(),
+          supabaseService.fetchActivities()
+        ]);
+
+        if (remoteUsers && remoteUsers.length > 0) setUsers(remoteUsers);
+        if (remotePatients && remotePatients.length > 0) setPatients(remotePatients);
+        if (remoteDoctors && remoteDoctors.length > 0) setDoctors(remoteDoctors);
+        if (remoteAppointments && remoteAppointments.length > 0) setAppointments(remoteAppointments);
+        if (remoteRecords && remoteRecords.length > 0) setMedicalRecords(remoteRecords);
+        if (remotePrescriptions && remotePrescriptions.length > 0) setPrescriptions(remotePrescriptions);
+        if (remoteDrugs && remoteDrugs.length > 0) setDrugs(remoteDrugs);
+        if (remoteTransactions && remoteTransactions.length > 0) setInventoryTransactions(remoteTransactions);
+        if (remoteActivities && remoteActivities.length > 0) setActivities(remoteActivities);
+
+        setSyncStatus('connected');
+      } catch (err) {
+        console.warn('Supabase initial sync notice:', err);
+        setSyncStatus('connected');
+      }
+    };
+
+    loadCloudData();
+  }, [isCloudConnected]);
+
+  // Sync state to local storage cache
   useEffect(() => {
     localStorage.setItem('hims_current_user', JSON.stringify(currentUser));
   }, [currentUser]);
@@ -172,6 +232,9 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
     setActivities((prev) => [newAct, ...prev]);
+    if (isCloudConnected) {
+      supabaseService.insertActivity(newAct).catch(console.warn);
+    }
   };
 
   const login = (username: string, role: UserRole) => {
@@ -220,7 +283,6 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
 
-    // Default fallback to first patient if user entered anything in demo
     const fallback = patients[0];
     if (fallback) {
       const patientUser: User = {
@@ -277,6 +339,11 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
     setPatients((prev) => [newPatient, ...prev]);
+
+    if (isCloudConnected) {
+      supabaseService.insertPatient(newPatient).catch(console.warn);
+    }
+
     showToast(`Patient registered successfully with ID: ${patient_id}`, 'success');
     logActivity(`Registered new patient ${newPatient.first_name} ${newPatient.last_name} (${patient_id})`);
     return newPatient;
@@ -284,6 +351,11 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updatePatient = (id: string, updatedData: Partial<Patient>) => {
     setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p)));
+
+    if (isCloudConnected) {
+      supabaseService.updatePatient(id, updatedData).catch(console.warn);
+    }
+
     showToast('Patient information updated successfully', 'success');
     logActivity(`Updated patient record ${id}`);
   };
@@ -311,6 +383,11 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
     setAppointments((prev) => [newApp, ...prev]);
+
+    if (isCloudConnected) {
+      supabaseService.insertAppointment(newApp).catch(console.warn);
+    }
+
     showToast('Appointment booked successfully!', 'success');
     logActivity(`Booked appointment for patient ${newApp.patient_id} with doctor ${newApp.doctor_id}`);
     return { success: true, message: 'Appointment booked successfully!' };
@@ -318,6 +395,11 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateAppointmentStatus = (id: string, status: Appointment['status']) => {
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+
+    if (isCloudConnected) {
+      supabaseService.updateAppointmentStatus(id, status).catch(console.warn);
+    }
+
     showToast(`Appointment status updated to ${status}`, 'success');
     logActivity(`Updated appointment ${id} status to ${status}`);
   };
@@ -342,11 +424,18 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setMedicalRecords((prev) => [newRecord, ...prev]);
 
+    if (isCloudConnected) {
+      supabaseService.insertMedicalRecord(newRecord).catch(console.warn);
+    }
+
     // If appointment id exists, update its status to Completed
     if (consultationData.appointment_id) {
       setAppointments((prev) =>
         prev.map((a) => (a.id === consultationData.appointment_id ? { ...a, status: 'Completed' } : a))
       );
+      if (isCloudConnected) {
+        supabaseService.updateAppointmentStatus(consultationData.appointment_id, 'Completed').catch(console.warn);
+      }
     }
 
     // If prescription items were added, create prescription
@@ -367,6 +456,11 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }))
       };
       setPrescriptions((prev) => [newPrescription, ...prev]);
+
+      if (isCloudConnected) {
+        supabaseService.insertPrescription(newPrescription).catch(console.warn);
+      }
+
       showToast(`Consultation saved & Prescription ${prescription_id} created successfully!`, 'success');
       logActivity(
         `Recorded consultation & generated prescription ${prescription_id} for patient ${consultationData.patient_id}`
@@ -413,12 +507,13 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     for (const item of rx.items) {
       const drugIdx = updatedDrugs.findIndex((d) => d.id === item.drug_id);
       if (drugIdx !== -1) {
+        const newQty = updatedDrugs[drugIdx].quantity - item.quantity;
         updatedDrugs[drugIdx] = {
           ...updatedDrugs[drugIdx],
-          quantity: updatedDrugs[drugIdx].quantity - item.quantity
+          quantity: newQty
         };
 
-        newTransactions.push({
+        const tx: InventoryTransaction = {
           id: 'tx-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
           drug_id: item.drug_id,
           drug_name: item.drug_name,
@@ -427,13 +522,23 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
           reference: `${rx.prescription_id} dispensed to ${rx.patient_id}`,
           performed_by: currentUser?.name || 'Pharmacist',
           created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
-        });
+        };
+        newTransactions.push(tx);
+
+        if (isCloudConnected) {
+          supabaseService.updateDrugQuantity(item.drug_id, newQty).catch(console.warn);
+          supabaseService.insertInventoryTransaction(tx).catch(console.warn);
+        }
       }
     }
 
     setDrugs(updatedDrugs);
     setInventoryTransactions((prev) => [...newTransactions, ...prev]);
     setPrescriptions((prev) => prev.map((p) => (p.id === rx.id ? { ...p, status: 'Dispensed' } : p)));
+
+    if (isCloudConnected) {
+      supabaseService.updatePrescriptionStatus(rx.id, 'Dispensed').catch(console.warn);
+    }
 
     showToast(`Prescription ${rx.prescription_id} dispensed successfully & stock updated!`, 'success');
     logActivity(`Dispensed prescription ${rx.prescription_id} for patient ${rx.patient_id}`);
@@ -461,6 +566,11 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setInventoryTransactions((prev) => [newTx, ...prev]);
 
+    if (isCloudConnected) {
+      supabaseService.insertDrug(newDrug).catch(console.warn);
+      supabaseService.insertInventoryTransaction(newTx).catch(console.warn);
+    }
+
     showToast(`New drug "${newDrug.drug_name}" added to inventory successfully!`, 'success');
     logActivity(`Added new drug ${newDrug.drug_name} (${newDrug.quantity} units)`);
   };
@@ -469,7 +579,8 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const drug = drugs.find((d) => d.id === drugId);
     if (!drug) return;
 
-    setDrugs((prev) => prev.map((d) => (d.id === drugId ? { ...d, quantity: d.quantity + quantityToAdd } : d)));
+    const newQty = drug.quantity + quantityToAdd;
+    setDrugs((prev) => prev.map((d) => (d.id === drugId ? { ...d, quantity: newQty } : d)));
 
     const newTx: InventoryTransaction = {
       id: 'tx-' + Date.now(),
@@ -482,6 +593,12 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
     setInventoryTransactions((prev) => [newTx, ...prev]);
+
+    if (isCloudConnected) {
+      supabaseService.updateDrugQuantity(drugId, newQty).catch(console.warn);
+      supabaseService.insertInventoryTransaction(newTx).catch(console.warn);
+    }
+
     showToast(`Added ${quantityToAdd} units of ${drug.drug_name} successfully!`, 'success');
     logActivity(`Restocked ${quantityToAdd} units of ${drug.drug_name}`);
   };
@@ -493,6 +610,11 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
     setUsers((prev) => [...prev, newUser]);
+
+    if (isCloudConnected) {
+      supabaseService.insertUser(newUser).catch(console.warn);
+    }
+
     showToast(`User ${newUser.name} created successfully!`, 'success');
     logActivity(`Created new user account for ${newUser.name} (${newUser.role})`);
   };
@@ -549,6 +671,8 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         currentRole: currentUser?.role || null,
         activePatient,
+        isCloudConnected,
+        syncStatus,
         login,
         patientLogin,
         logout,

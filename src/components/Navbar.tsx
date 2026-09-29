@@ -19,7 +19,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
-  const { currentUser, logout, switchRoleQuick } = useHims();
+  const { currentUser, logout, switchRoleQuick, isCloudConnected } = useHims();
   const [timeStr, setTimeStr] = useState('');
 
   useEffect(() => {
@@ -87,6 +87,15 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
                 <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800/60">
                   <Activity className="w-3 h-3 text-emerald-400" /> HIMS v2.4
                 </span>
+                {isCloudConnected ? (
+                  <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Supabase Cloud Active
+                  </span>
+                ) : (
+                  <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Supabase Ready
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
                 <span>Ibo Hall, Ikot Ekpene</span>
