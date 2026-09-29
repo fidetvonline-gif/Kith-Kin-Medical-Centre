@@ -22,6 +22,7 @@ import {
   initialInventoryTransactions,
   initialActivities
 } from '../data/initialData';
+import { supabase } from '../lib/supabase';
 import { supabaseService } from '../services/supabaseService';
 
 interface HimsContextType {
@@ -192,6 +193,23 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     loadCloudData();
+
+    // Setup Supabase Realtime Channels if connected
+    let channel: any = null;
+    if (supabase) {
+      channel = supabase
+        .channel('hims-realtime-sync')
+        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+          loadCloudData();
+        })
+        .subscribe();
+    }
+
+    return () => {
+      if (channel && supabase) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [isCloudConnected]);
 
   // Sync state to local storage cache

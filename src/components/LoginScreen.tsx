@@ -17,6 +17,7 @@ import {
   Phone,
   KeyRound
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export const LoginScreen: React.FC = () => {
   const { login, patientLogin, patients } = useHims();
@@ -149,6 +150,10 @@ export const LoginScreen: React.FC = () => {
             <Heart className="w-3.5 h-3.5 text-rose-400" />
             <span>Patient Self-Service Portal</span>
           </button>
+        </div>
+
+        <div className="mt-3 flex justify-center">
+          <PWAInstallButton variant="login" />
         </div>
       </div>
 

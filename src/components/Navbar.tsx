@@ -12,6 +12,7 @@ import {
   Activity,
   Heart
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   activeTab: string;
@@ -130,6 +131,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
 
           {/* User Info & Actions */}
           <div className="flex items-center space-x-3">
+            <PWAInstallButton />
+
             <div className="text-right hidden sm:block">
               <p className="text-xs font-semibold text-slate-200 leading-tight">{currentUser.name}</p>
               <div

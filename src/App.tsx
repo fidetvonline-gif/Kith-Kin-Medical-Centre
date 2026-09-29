@@ -3,6 +3,7 @@ import { HimsProvider, useHims } from './context/HimsContext';
 import { Navbar } from './components/Navbar';
 import { LoginScreen } from './components/LoginScreen';
 import { Toast } from './components/Toast';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ReceptionistDashboard } from './components/ReceptionistDashboard';
 import { DoctorDashboard } from './components/DoctorDashboard';
@@ -148,6 +149,7 @@ const MainAppContent: React.FC = () => {
       </footer>
 
       <Toast />
+      <OfflineIndicator />
     </div>
   );
 };

@@ -2,17 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>HIMS - Kith and Kin Medical Centre, Ikot Ekpene</title>
     <meta name="description" content="Hospital Information Management System for Kith and Kin Medical Centre, Ibo Hall, Ikot Ekpene." />
+    
+    <!-- PWA & Mobile Meta Tags -->
+    <meta name="theme-color" content="#059669" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="HIMS Portal" />
+    <meta name="application-name" content="Kith & Kin HIMS" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Open Graph -->
     <meta property="og:title" content="HIMS - Kith and Kin Medical Centre" />
     <meta property="og:description" content="Hospital Information Management System for Kith and Kin Medical Centre, Ikot Ekpene." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
-  <body>
+  <body className="bg-slate-950 text-slate-100 antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
