@@ -26,7 +26,9 @@ import {
 interface HimsContextType {
   currentUser: User | null;
   currentRole: UserRole | null;
+  activePatient: Patient | null;
   login: (username: string, role: UserRole) => boolean;
+  patientLogin: (patientIdOrPhone: string) => boolean;
   logout: () => void;
   switchRoleQuick: (role: UserRole) => void;
 
@@ -46,15 +48,18 @@ interface HimsContextType {
   bookAppointment: (appointmentData: Omit<Appointment, 'id' | 'created_at' | 'status'>) => { success: boolean; message: string };
   updateAppointmentStatus: (id: string, status: Appointment['status']) => void;
   
-  createConsultation: (consultationData: Omit<MedicalRecord, 'id' | 'created_at'>, prescriptionItems?: Array<{
-    drug_id: string;
-    drug_name: string;
-    dosage: string;
-    frequency: string;
-    duration: string;
-    quantity: number;
-    instructions: string;
-  }>) => void;
+  createConsultation: (
+    consultationData: Omit<MedicalRecord, 'id' | 'created_at'>,
+    prescriptionItems?: Array<{
+      drug_id: string;
+      drug_name: string;
+      dosage: string;
+      frequency: string;
+      duration: string;
+      quantity: number;
+      instructions: string;
+    }>
+  ) => void;
 
   dispensePrescription: (prescriptionId: string) => { success: boolean; message: string };
   addNewDrug: (drugData: Omit<Drug, 'id' | 'created_at'>) => void;
@@ -74,7 +79,12 @@ const HimsContext = createContext<HimsContextType | undefined>(undefined);
 export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('hims_current_user');
-    return saved ? JSON.parse(saved) : initialUsers[2]; // Default to Dr. John Udo (Doctor) for instant review
+    return saved ? JSON.parse(saved) : initialUsers[2]; // Default to Dr. John Udo (Doctor)
+  });
+
+  const [activePatient, setActivePatient] = useState<Patient | null>(() => {
+    const saved = localStorage.getItem('hims_active_patient');
+    return saved ? JSON.parse(saved) : null;
   });
 
   const [users, setUsers] = useState<User[]>(() => {
@@ -130,6 +140,10 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUser]);
 
   useEffect(() => {
+    localStorage.setItem('hims_active_patient', JSON.stringify(activePatient));
+  }, [activePatient]);
+
+  useEffect(() => {
     localStorage.setItem('hims_users', JSON.stringify(users));
     localStorage.setItem('hims_patients', JSON.stringify(patients));
     localStorage.setItem('hims_doctors', JSON.stringify(doctors));
@@ -157,36 +171,98 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       action,
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
-    setActivities(prev => [newAct, ...prev]);
+    setActivities((prev) => [newAct, ...prev]);
   };
 
   const login = (username: string, role: UserRole) => {
-    const found = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.role === role);
+    if (role === 'patient') {
+      return patientLogin(username);
+    }
+
+    const found = users.find((u) => u.username.toLowerCase() === username.toLowerCase() && u.role === role);
     if (found) {
       setCurrentUser(found);
+      setActivePatient(null);
       showToast(`Welcome back, ${found.name}! (${role.toUpperCase()})`, 'success');
       logActivity(`Logged in as ${role}`);
       return true;
     }
     // Fallback permit for demo
-    const fallbackUser = users.find(u => u.role === role) || users[0];
+    const fallbackUser = users.find((u) => u.role === role) || users[0];
     setCurrentUser(fallbackUser);
+    setActivePatient(null);
     showToast(`Logged in successfully as ${role}`, 'success');
     logActivity(`Logged in as ${role}`);
     return true;
   };
 
+  const patientLogin = (patientIdOrPhone: string) => {
+    const trimmed = patientIdOrPhone.trim().toLowerCase();
+    const foundPatient = patients.find(
+      (p) => p.patient_id.toLowerCase() === trimmed || p.phone.toLowerCase() === trimmed
+    );
+
+    if (foundPatient) {
+      const patientUser: User = {
+        id: foundPatient.id,
+        name: `${foundPatient.first_name} ${foundPatient.last_name}`,
+        username: foundPatient.patient_id,
+        role: 'patient',
+        phone: foundPatient.phone,
+        email: foundPatient.email,
+        created_at: foundPatient.created_at
+      };
+
+      setCurrentUser(patientUser);
+      setActivePatient(foundPatient);
+      showToast(`Welcome to your Patient Health Portal, ${foundPatient.first_name}!`, 'success');
+      logActivity(`Patient ${foundPatient.patient_id} signed into Patient Portal`);
+      return true;
+    }
+
+    // Default fallback to first patient if user entered anything in demo
+    const fallback = patients[0];
+    if (fallback) {
+      const patientUser: User = {
+        id: fallback.id,
+        name: `${fallback.first_name} ${fallback.last_name}`,
+        username: fallback.patient_id,
+        role: 'patient',
+        phone: fallback.phone,
+        email: fallback.email,
+        created_at: fallback.created_at
+      };
+      setCurrentUser(patientUser);
+      setActivePatient(fallback);
+      showToast(`Signed into Patient Portal for ${fallback.first_name} ${fallback.last_name}`, 'success');
+      return true;
+    }
+
+    showToast('Patient record not found. Please verify your Patient ID or Phone Number.', 'error');
+    return false;
+  };
+
   const logout = () => {
     logActivity('Logged out of system');
     setCurrentUser(null);
+    setActivePatient(null);
     showToast('Logged out successfully', 'info');
   };
 
   const switchRoleQuick = (role: UserRole) => {
-    const found = users.find(u => u.role === role);
+    if (role === 'patient') {
+      const pat = patients[0];
+      if (pat) {
+        patientLogin(pat.patient_id);
+      }
+      return;
+    }
+
+    const found = users.find((u) => u.role === role);
     if (found) {
       setCurrentUser(found);
-      showToast(`Switched role to ${role.toUpperCase()} (${found.name})`, 'success');
+      setActivePatient(null);
+      showToast(`Switched portal to ${role.toUpperCase()} (${found.name})`, 'success');
       logActivity(`Switched session to role ${role}`);
     }
   };
@@ -200,14 +276,14 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       patient_id,
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
-    setPatients(prev => [newPatient, ...prev]);
+    setPatients((prev) => [newPatient, ...prev]);
     showToast(`Patient registered successfully with ID: ${patient_id}`, 'success');
     logActivity(`Registered new patient ${newPatient.first_name} ${newPatient.last_name} (${patient_id})`);
     return newPatient;
   };
 
   const updatePatient = (id: string, updatedData: Partial<Patient>) => {
-    setPatients(prev => prev.map(p => p.id === id ? { ...p, ...updatedData } : p));
+    setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p)));
     showToast('Patient information updated successfully', 'success');
     logActivity(`Updated patient record ${id}`);
   };
@@ -215,10 +291,12 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const bookAppointment = (appointmentData: Omit<Appointment, 'id' | 'created_at' | 'status'>) => {
     // Check time slot clash for same doctor on same date and time
     const clash = appointments.find(
-      a => a.doctor_id === appointmentData.doctor_id &&
-           a.appointment_date === appointmentData.appointment_date &&
-           a.appointment_time === appointmentData.appointment_time &&
-           a.status !== 'Cancelled' && a.status !== 'Completed'
+      (a) =>
+        a.doctor_id === appointmentData.doctor_id &&
+        a.appointment_date === appointmentData.appointment_date &&
+        a.appointment_time === appointmentData.appointment_time &&
+        a.status !== 'Cancelled' &&
+        a.status !== 'Completed'
     );
 
     if (clash) {
@@ -232,14 +310,14 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: 'Scheduled',
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
-    setAppointments(prev => [newApp, ...prev]);
+    setAppointments((prev) => [newApp, ...prev]);
     showToast('Appointment booked successfully!', 'success');
     logActivity(`Booked appointment for patient ${newApp.patient_id} with doctor ${newApp.doctor_id}`);
     return { success: true, message: 'Appointment booked successfully!' };
   };
 
   const updateAppointmentStatus = (id: string, status: Appointment['status']) => {
-    setAppointments(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+    setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
     showToast(`Appointment status updated to ${status}`, 'success');
     logActivity(`Updated appointment ${id} status to ${status}`);
   };
@@ -262,11 +340,13 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
 
-    setMedicalRecords(prev => [newRecord, ...prev]);
+    setMedicalRecords((prev) => [newRecord, ...prev]);
 
     // If appointment id exists, update its status to Completed
     if (consultationData.appointment_id) {
-      setAppointments(prev => prev.map(a => a.id === consultationData.appointment_id ? { ...a, status: 'Completed' } : a));
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === consultationData.appointment_id ? { ...a, status: 'Completed' } : a))
+      );
     }
 
     // If prescription items were added, create prescription
@@ -286,9 +366,11 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: 'rxi-' + Date.now() + '-' + idx
         }))
       };
-      setPrescriptions(prev => [newPrescription, ...prev]);
+      setPrescriptions((prev) => [newPrescription, ...prev]);
       showToast(`Consultation saved & Prescription ${prescription_id} created successfully!`, 'success');
-      logActivity(`Recorded consultation & generated prescription ${prescription_id} for patient ${consultationData.patient_id}`);
+      logActivity(
+        `Recorded consultation & generated prescription ${prescription_id} for patient ${consultationData.patient_id}`
+      );
     } else {
       showToast('Consultation recorded successfully!', 'success');
       logActivity(`Recorded consultation for patient ${consultationData.patient_id}`);
@@ -302,7 +384,7 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const dispensePrescription = (prescriptionId: string) => {
-    const rx = prescriptions.find(p => p.id === prescriptionId || p.prescription_id === prescriptionId);
+    const rx = prescriptions.find((p) => p.id === prescriptionId || p.prescription_id === prescriptionId);
     if (!rx) {
       return { success: false, message: 'Prescription not found.' };
     }
@@ -312,12 +394,15 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Check if sufficient stock for all items
     for (const item of rx.items) {
-      const drug = drugs.find(d => d.id === item.drug_id);
+      const drug = drugs.find((d) => d.id === item.drug_id);
       if (!drug) {
         return { success: false, message: `Drug ${item.drug_name} not found in inventory.` };
       }
       if (drug.quantity < item.quantity) {
-        return { success: false, message: `Insufficient stock for ${drug.drug_name}. Available: ${drug.quantity}, Required: ${item.quantity}.` };
+        return {
+          success: false,
+          message: `Insufficient stock for ${drug.drug_name}. Available: ${drug.quantity}, Required: ${item.quantity}.`
+        };
       }
     }
 
@@ -326,7 +411,7 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newTransactions: InventoryTransaction[] = [];
 
     for (const item of rx.items) {
-      const drugIdx = updatedDrugs.findIndex(d => d.id === item.drug_id);
+      const drugIdx = updatedDrugs.findIndex((d) => d.id === item.drug_id);
       if (drugIdx !== -1) {
         updatedDrugs[drugIdx] = {
           ...updatedDrugs[drugIdx],
@@ -347,8 +432,8 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setDrugs(updatedDrugs);
-    setInventoryTransactions(prev => [...newTransactions, ...prev]);
-    setPrescriptions(prev => prev.map(p => p.id === rx.id ? { ...p, status: 'Dispensed' } : p));
+    setInventoryTransactions((prev) => [...newTransactions, ...prev]);
+    setPrescriptions((prev) => prev.map((p) => (p.id === rx.id ? { ...p, status: 'Dispensed' } : p)));
 
     showToast(`Prescription ${rx.prescription_id} dispensed successfully & stock updated!`, 'success');
     logActivity(`Dispensed prescription ${rx.prescription_id} for patient ${rx.patient_id}`);
@@ -361,8 +446,8 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: 'd-' + Date.now(),
       created_at: new Date().toISOString().substring(0, 10)
     };
-    setDrugs(prev => [newDrug, ...prev]);
-    
+    setDrugs((prev) => [newDrug, ...prev]);
+
     // Log initial stock in transaction
     const newTx: InventoryTransaction = {
       id: 'tx-' + Date.now(),
@@ -374,17 +459,17 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       performed_by: currentUser?.name || 'Admin',
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
-    setInventoryTransactions(prev => [newTx, ...prev]);
+    setInventoryTransactions((prev) => [newTx, ...prev]);
 
     showToast(`New drug "${newDrug.drug_name}" added to inventory successfully!`, 'success');
     logActivity(`Added new drug ${newDrug.drug_name} (${newDrug.quantity} units)`);
   };
 
   const addDrugStock = (drugId: string, quantityToAdd: number, reference: string) => {
-    const drug = drugs.find(d => d.id === drugId);
+    const drug = drugs.find((d) => d.id === drugId);
     if (!drug) return;
 
-    setDrugs(prev => prev.map(d => d.id === drugId ? { ...d, quantity: d.quantity + quantityToAdd } : d));
+    setDrugs((prev) => prev.map((d) => (d.id === drugId ? { ...d, quantity: d.quantity + quantityToAdd } : d)));
 
     const newTx: InventoryTransaction = {
       id: 'tx-' + Date.now(),
@@ -396,7 +481,7 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       performed_by: currentUser?.name || 'Pharmacist',
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
-    setInventoryTransactions(prev => [newTx, ...prev]);
+    setInventoryTransactions((prev) => [newTx, ...prev]);
     showToast(`Added ${quantityToAdd} units of ${drug.drug_name} successfully!`, 'success');
     logActivity(`Restocked ${quantityToAdd} units of ${drug.drug_name}`);
   };
@@ -407,7 +492,7 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: 'u-' + Date.now(),
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
-    setUsers(prev => [...prev, newUser]);
+    setUsers((prev) => [...prev, newUser]);
     showToast(`User ${newUser.name} created successfully!`, 'success');
     logActivity(`Created new user account for ${newUser.name} (${newUser.role})`);
   };
@@ -463,7 +548,9 @@ export const HimsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         currentUser,
         currentRole: currentUser?.role || null,
+        activePatient,
         login,
+        patientLogin,
         logout,
         switchRoleQuick,
         users,

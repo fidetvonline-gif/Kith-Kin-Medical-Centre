@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'receptionist' | 'doctor' | 'pharmacist';
+export type UserRole = 'admin' | 'receptionist' | 'doctor' | 'pharmacist' | 'patient';
 
 export interface User {
   id: string;
@@ -21,6 +21,8 @@ export interface Patient {
   email: string;
   address: string;
   emergency_contact: string;
+  blood_group?: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-';
+  genotype?: 'AA' | 'AS' | 'SS' | 'AC';
   photo?: string;
   created_at: string;
 }
@@ -46,6 +48,14 @@ export interface Appointment {
   created_at: string;
 }
 
+export interface Vitals {
+  blood_pressure?: string; // e.g. 120/80 mmHg
+  temperature?: string; // e.g. 36.8 °C
+  pulse_rate?: string; // e.g. 72 bpm
+  weight?: string; // e.g. 68 kg
+  spo2?: string; // e.g. 98%
+}
+
 export interface MedicalRecord {
   id: string;
   patient_id: string;
@@ -57,6 +67,7 @@ export interface MedicalRecord {
   diagnosis: string;
   treatment: string;
   doctor_notes: string;
+  vitals?: Vitals;
   follow_up_date?: string;
   created_at: string;
 }
